@@ -1,4 +1,4 @@
-# trading_journal_gsheet.py (final + safe_float + download + jam AM/PM)
+# trading_journal_gsheet.py (final + edit & hapus)
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -146,7 +146,6 @@ with st.form("trade_form", clear_on_submit=True):
     col1, col2, col3 = st.columns(3)
     with col1:
         pair = st.text_input("Pair (mis: XAUUSD)", "")
-        # Jam pakai format AM/PM
         jam = st.text_input("Jam (AM/PM)", datetime.now().strftime("%I:%M %p"))
         entry_price = st.number_input("Entry (price)", value=0.0, format="%.5f")
         sl_price = st.number_input("SL (price)", value=0.0, format="%.5f")
@@ -256,5 +255,52 @@ if not df.empty:
         file_name="jurnal_trading.pdf",
         mime="application/pdf"
     )
+
+    # === Edit / Hapus ===
+    st.subheader("✏️ Edit / ❌ Hapus Transaksi")
+
+    ids = df["ID"].tolist()
+    selected_id = st.selectbox("Pilih ID Transaksi", ids)
+
+    if selected_id:
+        selected_row = df[df["ID"] == selected_id].iloc[0]
+
+        # Hapus
+        if st.button("❌ Hapus Transaksi"):
+            all_values = sheet.get_all_values()
+            for idx, row in enumerate(all_values):
+                if str(row[0]) == str(selected_id):
+                    sheet.delete_rows(idx + 1)
+                    st.success(f"Transaksi ID {selected_id} berhasil dihapus.")
+                    st.experimental_rerun()
+
+        # Edit
+        with st.expander("✏️ Edit Transaksi"):
+            with st.form(f"edit_form_{selected_id}", clear_on_submit=True):
+                new_pair = st.text_input("Pair", selected_row["Pair"])
+                new_jam = st.text_input("Jam", selected_row["Jam"])
+                new_tanggal = st.text_input("Tanggal", selected_row["Tanggal"])
+                new_buy_sell = st.selectbox("Buy/Sell", ["BUY", "SELL"], index=0 if selected_row["Buy/Sell"]=="BUY" else 1)
+                new_entry = st.number_input("Entry", value=float(selected_row["Entry"]))
+                new_exit = st.number_input("Exit", value=float(selected_row["Exit"]))
+                new_lot = st.number_input("Lot", value=float(selected_row["Lot"]))
+                new_status = st.selectbox("Status", ["-", "SL", "TP", "BE", "Manual"], index=0)
+                new_note = st.text_area("Note", selected_row["Note"])
+                update_btn = st.form_submit_button("💾 Update")
+
+            if update_btn:
+                all_values = sheet.get_all_values()
+                for idx, row in enumerate(all_values):
+                    if str(row[0]) == str(selected_id):
+                        updated_row = [
+                            selected_id, new_pair, new_jam, new_tanggal, new_buy_sell,
+                            new_entry, new_exit, new_lot, "", "", "", new_status,
+                            selected_row["P/L"], new_note,
+                            selected_row["SS Before"], selected_row["SS After"],
+                            selected_row["Equity"]
+                        ]
+                        sheet.update(f"A{idx+1}:Q{idx+1}", [updated_row])
+                        st.success(f"Transaksi ID {selected_id} berhasil diupdate.")
+                        st.experimental_rerun()
 else:
     st.info("Belum ada transaksi yang tercatat.")
