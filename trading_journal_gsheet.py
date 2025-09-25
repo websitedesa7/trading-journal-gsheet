@@ -23,14 +23,38 @@ def get_gsheet_client():
 
 client = get_gsheet_client()
 
-# Ganti dengan nama spreadsheet kamu di Google Drive
+# --- Sheet utama & settings ---
 SHEET_NAME = "JurnalTrading"
-sheet = client.open(SHEET_NAME).sheet1
+SETTINGS_NAME = "Settings"
+
+try:
+    sheet = client.open(SHEET_NAME).sheet1
+except gspread.SpreadsheetNotFound:
+    st.error(f"Spreadsheet '{SHEET_NAME}' tidak ditemukan. Pastikan nama sama persis.")
+    st.stop()
+
+# Cek / buat sheet Settings
+spreadsheet = client.open(SHEET_NAME)
+try:
+    settings_sheet = spreadsheet.worksheet(SETTINGS_NAME)
+except gspread.exceptions.WorksheetNotFound:
+    settings_sheet = spreadsheet.add_worksheet(title=SETTINGS_NAME, rows=10, cols=2)
+    settings_sheet.update("A1:B1", [["TipeAkun", "EquityAwal"]])
+
+# Ambil data settings
+settings_data = settings_sheet.get_all_records()
+if settings_data:
+    tipe_akun_saved = settings_data[0]["TipeAkun"]
+    equity_awal_saved = float(settings_data[0]["EquityAwal"])
+else:
+    tipe_akun_saved = "Micro"
+    equity_awal_saved = 1000.0
 
 # --- Sidebar Pengaturan Akun ---
 st.sidebar.header("⚙️ Pengaturan Akun")
-tipe_akun = st.sidebar.selectbox("Tipe Akun", ["Micro", "Mini", "Standard"])
-equity_awal = st.sidebar.number_input("Equity Awal", min_value=0.0, value=1000.0, step=10.0)
+
+tipe_akun = st.sidebar.selectbox("Tipe Akun", ["Micro", "Mini", "Standard"], index=["Micro","Mini","Standard"].index(tipe_akun_saved))
+equity_awal = st.sidebar.number_input("Equity Awal", min_value=0.0, value=equity_awal_saved, step=10.0)
 
 # Hitung equity sekarang
 data = sheet.get_all_records()
@@ -41,7 +65,18 @@ else:
     equity_sekarang = equity_awal
 
 st.sidebar.metric("Equity Sekarang", f"{equity_sekarang:.2f}")
-st.sidebar.write(f"Akun: {tipe_akun} | Equity Awal: {equity_awal}")
+
+# Tombol reset
+if st.sidebar.button("🔄 Reset Equity"):
+    new_equity = st.number_input("Masukkan Equity Baru", min_value=0.0, value=1000.0, step=10.0, key="reset_equity")
+    if st.button("✅ Konfirmasi Reset"):
+        settings_sheet.update("A2:B2", [[tipe_akun, new_equity]])
+        st.success(f"Equity berhasil direset ke {new_equity}")
+        st.stop()
+
+# Simpan setting terbaru jika berubah
+if (tipe_akun != tipe_akun_saved) or (equity_awal != equity_awal_saved):
+    settings_sheet.update("A2:B2", [[tipe_akun, equity_awal]])
 
 # --- Form Input Transaksi Baru ---
 st.subheader("✍️ Input Transaksi Baru")
