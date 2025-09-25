@@ -23,23 +23,31 @@ def get_gsheet_client():
 
 client = get_gsheet_client()
 
-# --- Sheet utama & settings ---
+# --- Sheet utama ---
 SHEET_NAME = "JurnalTrading"
-SETTINGS_NAME = "Settings"
+spreadsheet = client.open(SHEET_NAME)
 
 try:
-    sheet = client.open(SHEET_NAME).sheet1
-except gspread.SpreadsheetNotFound:
-    st.error(f"Spreadsheet '{SHEET_NAME}' tidak ditemukan. Pastikan nama sama persis.")
-    st.stop()
+    sheet = spreadsheet.worksheet("Sheet1")
+except gspread.exceptions.WorksheetNotFound:
+    sheet = spreadsheet.add_worksheet(title="Sheet1", rows=1000, cols=20)
 
-# Cek / buat sheet Settings
-spreadsheet = client.open(SHEET_NAME)
+# === Tambahkan header kalau sheet masih kosong ===
+if not sheet.get_all_values():  # jika kosong
+    header = [
+        "Pair", "Action", "Tanggal", "Jam", "Entry", "Lot", "SL", "TP1", "TP2",
+        "Status", "Profit", "Note", "Link"
+    ]
+    sheet.append_row(header)
+
+# --- Sheet Settings ---
+SETTINGS_NAME = "Settings"
 try:
     settings_sheet = spreadsheet.worksheet(SETTINGS_NAME)
 except gspread.exceptions.WorksheetNotFound:
     settings_sheet = spreadsheet.add_worksheet(title=SETTINGS_NAME, rows=10, cols=2)
     settings_sheet.update("A1:B1", [["TipeAkun", "EquityAwal"]])
+    settings_sheet.update("A2:B2", [["Micro", 1000]])
 
 # Ambil data settings
 settings_data = settings_sheet.get_all_records()
@@ -53,7 +61,10 @@ else:
 # --- Sidebar Pengaturan Akun ---
 st.sidebar.header("⚙️ Pengaturan Akun")
 
-tipe_akun = st.sidebar.selectbox("Tipe Akun", ["Micro", "Mini", "Standard"], index=["Micro","Mini","Standard"].index(tipe_akun_saved))
+tipe_akun = st.sidebar.selectbox(
+    "Tipe Akun", ["Micro", "Mini", "Standard"],
+    index=["Micro","Mini","Standard"].index(tipe_akun_saved)
+)
 equity_awal = st.sidebar.number_input("Equity Awal", min_value=0.0, value=equity_awal_saved, step=10.0)
 
 # Hitung equity sekarang
@@ -66,7 +77,7 @@ else:
 
 st.sidebar.metric("Equity Sekarang", f"{equity_sekarang:.2f}")
 
-# Tombol reset
+# Tombol reset equity
 if st.sidebar.button("🔄 Reset Equity"):
     new_equity = st.number_input("Masukkan Equity Baru", min_value=0.0, value=1000.0, step=10.0, key="reset_equity")
     if st.button("✅ Konfirmasi Reset"):
