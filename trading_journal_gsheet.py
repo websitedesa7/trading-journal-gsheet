@@ -1,9 +1,13 @@
-# trading_journal_gsheet.py (final dengan safe_float)
+# trading_journal_gsheet.py (final + safe_float + download + jam AM/PM)
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime
+import io
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
 
 st.set_page_config(page_title="📒 Trading Journal", layout="wide")
 
@@ -142,7 +146,8 @@ with st.form("trade_form", clear_on_submit=True):
     col1, col2, col3 = st.columns(3)
     with col1:
         pair = st.text_input("Pair (mis: XAUUSD)", "")
-        jam = st.text_input("Jam (HH:MM)", datetime.now().strftime("%H:%M"))
+        # Jam pakai format AM/PM
+        jam = st.text_input("Jam (AM/PM)", datetime.now().strftime("%I:%M %p"))
         entry_price = st.number_input("Entry (price)", value=0.0, format="%.5f")
         sl_price = st.number_input("SL (price)", value=0.0, format="%.5f")
         pl_manual = st.number_input("P/L Manual (opsional, isi 0 untuk otomatis)", value=0.0, format="%.2f")
@@ -213,5 +218,43 @@ df = pd.DataFrame(raw_data)
 if not df.empty:
     df["P/L"] = df["P/L"].apply(safe_float)
     st.dataframe(df, use_container_width=True)
+
+    # === Download Excel ===
+    excel_buffer = io.BytesIO()
+    df.to_excel(excel_buffer, index=False, engine="openpyxl")
+    st.download_button(
+        "📥 Download Excel",
+        data=excel_buffer.getvalue(),
+        file_name="jurnal_trading.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    # === Download PDF ===
+    def create_pdf(dataframe):
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer)
+        styles = getSampleStyleSheet()
+        story = [Paragraph("📊 Jurnal Trading", styles['Title']), Spacer(1, 12)]
+
+        table_data = [list(dataframe.columns)] + dataframe.values.tolist()
+        table = Table(table_data)
+        table.setStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+        ])
+        story.append(table)
+        doc.build(story)
+        buffer.seek(0)
+        return buffer
+
+    pdf_file = create_pdf(df)
+    st.download_button(
+        "📥 Download PDF",
+        data=pdf_file,
+        file_name="jurnal_trading.pdf",
+        mime="application/pdf"
+    )
 else:
     st.info("Belum ada transaksi yang tercatat.")
