@@ -4,25 +4,35 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import datetime
 
+# --- Konfigurasi Streamlit ---
 st.set_page_config(page_title="📒 Jurnal Trading - Google Sheets", layout="wide")
+st.title("📒 Jurnal Trading – Google Sheets Version")
 
 # --- Setup koneksi Google Sheets ---
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
 def get_gsheet_client():
-    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=SCOPES
+    )
     return gspread.authorize(creds)
 
 client = get_gsheet_client()
-# Ganti dengan nama spreadsheet yang kamu buat di Google Sheets
+
+# Ganti dengan nama spreadsheet kamu di Google Drive
 SHEET_NAME = "JurnalTrading"
 sheet = client.open(SHEET_NAME).sheet1
 
-
-# --- Sidebar ---
+# --- Sidebar Pengaturan Akun ---
 st.sidebar.header("⚙️ Pengaturan Akun")
 tipe_akun = st.sidebar.selectbox("Tipe Akun", ["Micro", "Mini", "Standard"])
 equity_awal = st.sidebar.number_input("Equity Awal", min_value=0.0, value=1000.0, step=10.0)
 
-# Hitung equity sekarang dari data sheet
+# Hitung equity sekarang
 data = sheet.get_all_records()
 df = pd.DataFrame(data)
 if not df.empty and "Profit" in df.columns:
@@ -33,13 +43,9 @@ else:
 st.sidebar.metric("Equity Sekarang", f"{equity_sekarang:.2f}")
 st.sidebar.write(f"Akun: {tipe_akun} | Equity Awal: {equity_awal}")
 
-
-# --- Main Title ---
-st.title("📒 Jurnal Trading – Google Sheets Version")
-
+# --- Form Input Transaksi Baru ---
 st.subheader("✍️ Input Transaksi Baru")
 
-# --- Input form ---
 with st.form("entry_form"):
     col1, col2, col3 = st.columns(3)
 
@@ -71,14 +77,13 @@ with st.form("entry_form"):
         sheet.append_row(row)
         st.success("✅ Transaksi berhasil disimpan ke Google Sheets!")
 
-
-# --- Tampilkan Data ---
+# --- Tampilkan Data Transaksi ---
 st.subheader("📊 Riwayat Transaksi")
 
 data = sheet.get_all_records()
 df = pd.DataFrame(data)
 
 if not df.empty:
-    st.dataframe(df)
+    st.dataframe(df, use_container_width=True)
 else:
     st.info("Belum ada transaksi yang tercatat.")
