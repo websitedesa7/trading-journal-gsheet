@@ -23,14 +23,12 @@ def get_gsheet_client():
 
 client = get_gsheet_client()
 
-# --- Sheet utama ---
-SHEET_NAME = "JurnalTrading"
+# --- Spreadsheet utama ---
+SHEET_NAME = "JurnalTrading"  # pastikan nama file Google Sheets = JurnalTrading
 spreadsheet = client.open(SHEET_NAME)
 
-try:
-    sheet = spreadsheet.worksheet("Sheet1")
-except gspread.exceptions.WorksheetNotFound:
-    sheet = spreadsheet.add_worksheet(title="Sheet1", rows=1000, cols=20)
+# Ambil worksheet pertama
+sheet = spreadsheet.sheet1
 
 # === Tambahkan header kalau sheet masih kosong ===
 if not sheet.get_all_values():  # jika kosong
@@ -63,9 +61,11 @@ st.sidebar.header("⚙️ Pengaturan Akun")
 
 tipe_akun = st.sidebar.selectbox(
     "Tipe Akun", ["Micro", "Mini", "Standard"],
-    index=["Micro","Mini","Standard"].index(tipe_akun_saved)
+    index=["Micro", "Mini", "Standard"].index(tipe_akun_saved)
 )
-equity_awal = st.sidebar.number_input("Equity Awal", min_value=0.0, value=equity_awal_saved, step=10.0)
+equity_awal = st.sidebar.number_input(
+    "Equity Awal", min_value=0.0, value=equity_awal_saved, step=10.0
+)
 
 # Hitung equity sekarang
 data = sheet.get_all_records()
@@ -79,7 +79,9 @@ st.sidebar.metric("Equity Sekarang", f"{equity_sekarang:.2f}")
 
 # Tombol reset equity
 if st.sidebar.button("🔄 Reset Equity"):
-    new_equity = st.number_input("Masukkan Equity Baru", min_value=0.0, value=1000.0, step=10.0, key="reset_equity")
+    new_equity = st.number_input(
+        "Masukkan Equity Baru", min_value=0.0, value=1000.0, step=10.0, key="reset_equity"
+    )
     if st.button("✅ Konfirmasi Reset"):
         settings_sheet.update("A2:B2", [[tipe_akun, new_equity]])
         st.success(f"Equity berhasil direset ke {new_equity}")
