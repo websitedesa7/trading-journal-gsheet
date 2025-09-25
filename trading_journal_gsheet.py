@@ -1,4 +1,4 @@
-# trading_journal_gsheet.py (final + edit & hapus)
+# trading_journal_gsheet.py (final aman)
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -181,27 +181,12 @@ if submitted:
 
     vals = sheet.get_all_values()
     new_id = max(0, len(vals) - 1) + 1
-
     new_equity = equity_awal + existing_pl_sum + pl_value
 
     row = [
-        new_id,
-        pair,
-        jam,
-        tanggal.strftime("%Y-%m-%d"),
-        buy_sell,
-        entry_price,
-        exit_price,
-        lot,
-        sl_price,
-        tp1,
-        tp2,
-        status,
-        pl_value,
-        note,
-        ss_before,
-        ss_after,
-        new_equity
+        new_id, pair, jam, tanggal.strftime("%Y-%m-%d"), buy_sell,
+        entry_price, exit_price, lot, sl_price, tp1, tp2, status,
+        pl_value, note, ss_before, ss_after, new_equity
     ]
 
     sheet.append_row(row, value_input_option="USER_ENTERED")
@@ -258,23 +243,28 @@ if not df.empty:
 
     # === Edit / Hapus ===
     st.subheader("✏️ Edit / ❌ Hapus Transaksi")
-
     ids = df["ID"].tolist()
     selected_id = st.selectbox("Pilih ID Transaksi", ids)
 
     if selected_id:
         selected_row = df[df["ID"] == selected_id].iloc[0]
 
-        # Hapus
+        # Hapus aman
         if st.button("❌ Hapus Transaksi"):
             all_values = sheet.get_all_values()
+            row_to_delete = None
             for idx, row in enumerate(all_values):
                 if str(row[0]) == str(selected_id):
-                    sheet.delete_rows(idx + 1)
-                    st.success(f"Transaksi ID {selected_id} berhasil dihapus.")
-                    st.experimental_rerun()
+                    row_to_delete = idx + 1
+                    break
+            if row_to_delete:
+                sheet.delete_rows(row_to_delete)
+                st.success(f"Transaksi ID {selected_id} berhasil dihapus.")
+                st.experimental_rerun()
+            else:
+                st.error("Gagal menemukan baris untuk dihapus.")
 
-        # Edit
+        # Edit aman
         with st.expander("✏️ Edit Transaksi"):
             with st.form(f"edit_form_{selected_id}", clear_on_submit=True):
                 new_pair = st.text_input("Pair", selected_row["Pair"])
@@ -294,8 +284,9 @@ if not df.empty:
                     if str(row[0]) == str(selected_id):
                         updated_row = [
                             selected_id, new_pair, new_jam, new_tanggal, new_buy_sell,
-                            new_entry, new_exit, new_lot, "", "", "", new_status,
-                            selected_row["P/L"], new_note,
+                            new_entry, new_exit, new_lot,
+                            selected_row["SL"], selected_row["TP1"], selected_row["TP2"],
+                            new_status, selected_row["P/L"], new_note,
                             selected_row["SS Before"], selected_row["SS After"],
                             selected_row["Equity"]
                         ]
