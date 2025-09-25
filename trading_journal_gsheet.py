@@ -1,144 +1,84 @@
 import streamlit as st
-import pandas as pd
 import gspread
-import json
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
+import pandas as pd
+from datetime import datetime
 
-# ------------------------
-# Google Sheets Connection
-# ------------------------
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+st.set_page_config(page_title="📒 Jurnal Trading - Google Sheets", layout="wide")
 
-if "GSPREAD_CREDENTIALS" in st.secrets:
-    # Baca dari secrets di Streamlit Cloud
-    creds_dict = json.loads(st.secrets["GSPREAD_CREDENTIALS"])
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+# --- Setup koneksi Google Sheets ---
+def get_gsheet_client():
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"])
+    return gspread.authorize(creds)
+
+client = get_gsheet_client()
+# Ganti dengan nama spreadsheet yang kamu buat di Google Sheets
+SHEET_NAME = "JurnalTrading"
+sheet = client.open(SHEET_NAME).sheet1
+
+
+# --- Sidebar ---
+st.sidebar.header("⚙️ Pengaturan Akun")
+tipe_akun = st.sidebar.selectbox("Tipe Akun", ["Micro", "Mini", "Standard"])
+equity_awal = st.sidebar.number_input("Equity Awal", min_value=0.0, value=1000.0, step=10.0)
+
+# Hitung equity sekarang dari data sheet
+data = sheet.get_all_records()
+df = pd.DataFrame(data)
+if not df.empty and "Profit" in df.columns:
+    equity_sekarang = equity_awal + df["Profit"].sum()
 else:
-    # Fallback offline lokal, pastikan ada file credentials.json
-    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+    equity_sekarang = equity_awal
 
-client = gspread.authorize(creds)
+st.sidebar.metric("Equity Sekarang", f"{equity_sekarang:.2f}")
+st.sidebar.write(f"Akun: {tipe_akun} | Equity Awal: {equity_awal}")
 
-# Nama Sheet (ganti sesuai kebutuhanmu)
-SHEET_NAME = "Jurnal_Trading"
-try:
-    sheet = client.open(SHEET_NAME).sheet1
-except Exception as e:
-    st.error(f"Gagal membuka Google Sheet: {e}")
-    st.stop()
 
-# ------------------------
-# Helper Functions
-# ------------------------
-def load_data():
-    """Ambil data dari Google Sheet"""
-    data = sheet.get_all_records()
-    df = pd.DataFrame(data)
-    return df
+# --- Main Title ---
+st.title("📒 Jurnal Trading – Google Sheets Version")
 
-def append_data(row):
-    """Tambah baris ke Google Sheet"""
-    sheet.append_row(row)
+st.subheader("✍️ Input Transaksi Baru")
 
-def clear_data():
-    """Hapus semua data di Google Sheet (kecuali header)"""
-    values = sheet.get_all_values()
-    if len(values) > 1:
-        sheet.delete_rows(2, len(values))
+# --- Input form ---
+with st.form("entry_form"):
+    col1, col2, col3 = st.columns(3)
 
-# ------------------------
-# Streamlit App
-# ------------------------
-st.title("📊 Jurnal Trading (Google Sheets Version)")
-
-menu = ["Tambah Entry", "Lihat Data", "Export"]
-choice = st.sidebar.selectbox("Menu", menu)
-
-# Sidebar Equity Tracking
-if "equity" not in st.session_state:
-    st.session_state["equity"] = 1000  # default equity awal
-
-st.sidebar.write(f"💰 Equity Saat Ini: **{st.session_state['equity']}**")
-
-if choice == "Tambah Entry":
-    st.subheader("➕ Tambah Transaksi Baru")
-
-    col1, col2 = st.columns(2)
     with col1:
-        date = st.date_input("Tanggal")
-        pair = st.text_input("Pair/Symbol", "XAUUSD")
-        entry_type = st.selectbox("Tipe Order", ["BUY", "SELL"])
-        lot_size = st.number_input("Lot Size", min_value=0.01, step=0.01)
+        pair = st.text_input("Pair", "XAUUSD")
+        tanggal = st.date_input("Tanggal", datetime.today())
+        jam = st.time_input("Jam", datetime.now().time())
+        status = st.selectbox("Status", ["Running", "TP", "SL"])
     with col2:
-        entry_price = st.number_input("Entry Price", step=0.01)
-        exit_price = st.number_input("Exit Price", step=0.01)
-        status = st.selectbox("Status", ["-", "SL", "TP", "BE"])
-        notes = st.text_area("Catatan")
+        action = st.selectbox("BUY / SELL", ["BUY", "SELL"])
+        entry = st.number_input("Entry", value=0.0, step=0.01)
+        lot = st.number_input("Lot", value=0.10, step=0.01)
+        sl = st.number_input("SL", value=0.0, step=0.01)
+    with col3:
+        tp1 = st.number_input("TP1", value=0.0, step=0.01)
+        tp2 = st.number_input("TP2", value=0.0, step=0.01)
+        profit = st.number_input("Profit", value=0.0, step=0.01)
+        note = st.text_area("Note")
 
-    pl_manual = st.number_input("Profit/Loss Manual", step=0.01, value=0.0)
-    link_before = st.text_input("Chart Before (Link opsional)")
-    link_after = st.text_input("Chart After (Link opsional)")
+    link = st.text_input("Link Screenshot Entry")
 
-    if st.button("Simpan Transaksi"):
-        # Hitung P/L otomatis bila pl_manual = 0
-        if pl_manual == 0.0 and entry_price and exit_price:
-            if entry_type == "BUY":
-                pl = (exit_price - entry_price) * lot_size * 100
-            else:
-                pl = (entry_price - exit_price) * lot_size * 100
-        else:
-            pl = pl_manual
+    submitted = st.form_submit_button("💾 Simpan Transaksi")
 
-        # Update equity di session_state
-        st.session_state["equity"] += pl
-
+    if submitted:
         row = [
-            str(date),
-            pair,
-            entry_type,
-            lot_size,
-            entry_price,
-            exit_price,
-            status,
-            pl,
-            st.session_state["equity"],
-            notes,
-            link_before,
-            link_after,
+            pair, action, tanggal.strftime("%Y-%m-%d"), jam.strftime("%H:%M"),
+            entry, lot, sl, tp1, tp2, status, profit, note, link
         ]
-        append_data(row)
-        st.success("Transaksi berhasil disimpan ✅")
+        sheet.append_row(row)
+        st.success("✅ Transaksi berhasil disimpan ke Google Sheets!")
 
-elif choice == "Lihat Data":
-    st.subheader("📑 Riwayat Transaksi")
-    df = load_data()
-    if df.empty:
-        st.info("Belum ada data tersimpan.")
-    else:
-        st.dataframe(df, use_container_width=True)
 
-        # Filter opsional
-        with st.expander("🔍 Filter Data"):
-            symbol_filter = st.text_input("Cari Pair/Symbol")
-            if symbol_filter:
-                df = df[df["pair"].str.contains(symbol_filter, case=False)]
+# --- Tampilkan Data ---
+st.subheader("📊 Riwayat Transaksi")
 
-            status_filter = st.selectbox("Filter Status", ["-", "ALL", "SL", "TP", "BE"])
-            if status_filter != "ALL":
-                df = df[df["status"] == status_filter]
+data = sheet.get_all_records()
+df = pd.DataFrame(data)
 
-            st.dataframe(df, use_container_width=True)
-
-elif choice == "Export":
-    st.subheader("⬇️ Export Data")
-    df = load_data()
-    if df.empty:
-        st.warning("Tidak ada data untuk di-export.")
-    else:
-        # Download Excel
-        excel_file = df.to_excel(index=False, engine="openpyxl")
-        st.download_button("Download Excel", data=excel_file, file_name="jurnal_trading.xlsx")
-
-        # Download CSV
-        csv_file = df.to_csv(index=False).encode("utf-8")
-        st.download_button("Download CSV", data=csv_file, file_name="jurnal_trading.csv")
+if not df.empty:
+    st.dataframe(df)
+else:
+    st.info("Belum ada transaksi yang tercatat.")
